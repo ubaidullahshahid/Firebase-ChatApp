@@ -56,7 +56,7 @@ const Dashboard = () => {
     };
     fetchUsers();
     fetchMessages();
-  }, []);
+  }, [currUser.uid]);
   return (
     <>
       {loading ? (
