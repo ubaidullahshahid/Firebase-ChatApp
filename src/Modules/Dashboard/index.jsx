@@ -4,32 +4,54 @@ import Input from "../../Components/input/input";
 import {
   addDoc,
   collection,
+  doc,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { useSelector } from "react-redux";
 import { db } from "../../Config/firebase";
 import Loader from "../../Components/loader/Loader";
+import { CiMenuKebab } from "react-icons/ci";
 
 const Dashboard = () => {
   const [message, setMessage] = useState("");
   const [allMessages, setAllMessages] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [editMessageId, setEditMessageId] = useState(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { currUser } = useSelector((state) => state.currentUser);
 
   const handleInputChange = (e) => {
-    setMessage(e.target.value);
+    const value = e.target.value;
+    if (value !== " ") {
+      setMessage(value);
+    }
+  };
+  const sendMessage = async () => {
+    if (editMessageId) {
+      await updateDoc(doc(db, "messages", editMessageId), {
+        message,
+        editedAt: serverTimestamp(),
+      });
+      setEditMessageId(null);
+    } else {
+      await addDoc(collection(db, "messages"), {
+        message,
+        sentBy: currUser.uid,
+        sentAt: serverTimestamp(),
+      });
+    }
+    setMessage("");
   };
 
-  const sendMessage = async () => {
-    await addDoc(collection(db, "messages"), {
-      message,
-      sentBy: currUser.uid,
-      sentAt: serverTimestamp(),
-    });
+  const handleEditMessage = (message) => {
+    setMessage(message.message);
+    setEditMessageId(message.id);
   };
 
   useEffect(() => {
@@ -44,19 +66,36 @@ const Dashboard = () => {
       setLoading(false);
     };
 
-    const fetchMessages = async () => {
-      setLoading(true);
+    const fetchMessages = () => {
       const q = query(collection(db, "messages"), orderBy("sentAt", "asc"));
-
-      const querySnapshot = await getDocs(q);
-      setAllMessages(
-        querySnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }))
-      );
-      setLoading(false);
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        setAllMessages(
+          querySnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }))
+        );
+      });
+      return unsubscribe;
     };
+
     fetchUsers();
-    fetchMessages();
+    const unsubscribeMessages = fetchMessages();
+
+    return () => {
+      unsubscribeMessages();
+    };
   }, [currUser.uid]);
+
+  const toggleMenu = (messageId) => {
+    setIsMenuOpen((prev) => ({
+      [messageId]: prev[messageId] ? false : true,
+    }));
+  };
+
+  const deleteMessage = async (messageId) => {
+    await updateDoc(doc(db, "messages", messageId), {
+      message: "this message is deleted",
+      deletedAt: serverTimestamp(),
+    });
+  };
   return (
     <>
       {loading ? (
@@ -130,13 +169,48 @@ const Dashboard = () => {
                 {allMessages.length > 0 &&
                   allMessages.map((message) => (
                     <div
-                      className={`max-w-[90%]  w-[max-content] rounded-b-lg rounded-tr-lg p-4 mb-8 ${
+                      className={`max-w-[90%] relative w-[max-content] rounded-b-lg rounded-tr-lg p-4 mb-8 ${
                         message.sentBy === currUser.uid
                           ? "ml-auto bg-primary"
                           : "bg-secondary"
                       }`}
+                      key={message.id}
                     >
                       <p>{message.message}</p>
+                      {message.message !== "this message is deleted" && (
+                        <>
+                          <span
+                            className="absolute top-1 left-0"
+                            onClick={() => toggleMenu(message.id)}
+                          >
+                            <CiMenuKebab />
+                          </span>
+                          <div
+                            className={`bg-black ${
+                              isMenuOpen[message.id]
+                                ? "flex flex-col"
+                                : "hidden"
+                            } cursor-pointer rounded-lg text-white p-2 absolute z-10 top-[-52px] left-[-50px]`}
+                          >
+                            <p
+                              onClick={() => {
+                                handleEditMessage(message);
+                                toggleMenu(message.id);
+                              }}
+                            >
+                              Edit
+                            </p>
+                            <p
+                              onClick={() => {
+                                deleteMessage(message.id);
+                                toggleMenu(message.id);
+                              }}
+                            >
+                              Delete
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
               </div>
@@ -149,10 +223,9 @@ const Dashboard = () => {
                   type="text"
                   placeholder="Type Message..."
                   className="w-full"
-                  // inputClassName="p-4 border-0 shadow-lg rounded-full bg-light focus:ring-0"
                   value={message}
                   onChange={handleInputChange}
-                  isRequired={true} // Agar required hai
+                  isRequired={true}
                 />
               </div>
               <div

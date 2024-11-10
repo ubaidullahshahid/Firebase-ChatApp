@@ -8,10 +8,11 @@ import { ToastContainer } from "react-toastify";
 import { useDispatch, useSelector } from "react-redux";
 import { setCurrentUser, setLoading } from "./Redux/Authentication/AuthSlice";
 import Loader from "./Components/loader/Loader";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./Config/firebase";
 
 const App = () => {
   const dispatch = useDispatch();
-
   const publicRoutes = [
     { path: "/", element: <Form isSignInPage={true} /> },
     { path: "/signup", element: <Form isSignInPage={false} /> },
@@ -29,11 +30,18 @@ const App = () => {
   };
 
   const { currUser, loading } = useSelector((state) => state.currentUser);
+
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("currentUser"));
-    dispatch(setCurrentUser(user));
-    dispatch(setLoading());
-  }, [dispatch]); 
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        dispatch(setCurrentUser(currentUser));
+        dispatch(setLoading());
+      } else {
+        dispatch(setCurrentUser(null));
+      }
+    });
+    return () => unsubscribe();
+  }, [dispatch]);
 
   if (loading) {
     return <Loader />;
