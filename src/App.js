@@ -38,6 +38,7 @@ const App = () => {
         dispatch(setLoading());
       } else {
         dispatch(setCurrentUser(null));
+        dispatch(setLoading());
       }
     });
     return () => unsubscribe();
